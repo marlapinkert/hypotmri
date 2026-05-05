@@ -386,8 +386,8 @@ def run_pipeline(
                 sorted(unknown), STEP_KEYS))
         ow.update(overwrite)
 
-    bids_dir   = str(Path(bids_dir).resolve())
-    output_dir = str(Path(os.path.join(bids_dir, 'derivatives', output_file)).resolve())
+    bids_dir   = str(Path(bids_dir))
+    output_dir = str(Path(os.path.join(bids_dir, 'derivatives', output_file)))
 
     func_dir = os.path.join(bids_dir, subject, session, 'func')
     fmap_dir = os.path.join(bids_dir, subject, session, 'fmap')
