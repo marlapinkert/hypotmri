@@ -74,7 +74,7 @@ install_preproc() {
 
     FSL_ENV_URL="https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/releases/fsl-${FSL_VERSION}_${FSL_PLATFORM}.yml"
     curl -L -o fsl_env.yml $FSL_ENV_URL
-    $PYPACKAGE_MANAGER env create -n $ENV_NAME --file=fsl_env.yml -y
+    $PYPACKAGE_MANAGER env create -n $ENV_NAME --file=fsl_env.yml 
     rm fsl_env.yml
     $PYPACKAGE_MANAGER run -n $ENV_NAME pip install \
         nibabel==$NIBABEL_VERSION \
