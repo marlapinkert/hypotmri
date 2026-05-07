@@ -24,7 +24,7 @@ export UCL_SERVER_ID="ucl-work"
 export REMOTE_BIDS_DIR_PATH="/home/ucjvmdd/Scratch/projects/${PROJ_NAME}"
 export REMOTE_BIDS_DIR="${UCL_SERVER_ID}:${REMOTE_BIDS_DIR_PATH}"
 ```
-Here is another example for anothe project I'm running:
+Here is another example for another project I'm running:
 ```bash
 #!/bin/bash
 # Put inside $PIPELINE_DIR/config/project_stripe.sh
