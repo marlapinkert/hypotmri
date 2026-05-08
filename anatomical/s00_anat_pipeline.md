@@ -41,7 +41,7 @@ qc_surfaces_movie.sh <sub-id>
 Step [1] will create the subject specific freesurfer folder. Now we use this to create the benson atlas
 ```bash
 conda activate b14 # python environment we need
-s02_b14atlas.py <sub-id> --SUBJECTS_DIR $SUBJECTS_DIR
+s02_b14atlas.py <sub-id> --fsdir $SUBJECTS_DIR
 ```
 This will add benson atlas to your freesurfer folder and add the ROIS to your label folder 
 
