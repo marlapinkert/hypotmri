@@ -219,7 +219,7 @@ def apply_warp_to_sbref(
 def process_run(
     bold_path: str,
     topup_path: str,
-    sbref_path: str,
+    sbref_path: str | None,
     subject: str,
     session: str,
     task: str,
@@ -258,8 +258,8 @@ def process_run(
 
     bold_json  = re.sub(r'\.nii(\.gz)?$', '.json', bold_path)
     topup_json = re.sub(r'\.nii(\.gz)?$', '.json', topup_path)
-    bold_pe    = read_pe_direction(bold_json)
-    topup_pe   = read_pe_direction(topup_json)
+    bold_pe    = read_pe_direction(bold_json) # "j" FIXME
+    topup_pe   = read_pe_direction(topup_json) # "j-" FIXME
 
     print('  Volume information:')
     print('    BOLD volumes      : {}'.format(n_vols_bold))
@@ -329,37 +329,41 @@ def process_run(
     print('    -> {}'.format(unwarp_out))
 
     # ------------------------------------------------------------------
-    # Step 4 — Apply warp to SBREF
+    # Step 4 — Apply warp to SBREF (if present)
     # ------------------------------------------------------------------
-    print('\n  [Step 4] Applying warp to SBREF...')
+    if sbref_path:
+        print('\n  [Step 4] Applying warp to SBREF...')
 
-    sdc_sbref = _out('{}_sdc_sbref'.format(run_suffix)) # output sdc sbref
-    print(os.listdir(os.path.join(work_dir, 'unWarpOutput_TS')))
-    # - find the correct warp file from previous step
-    fwd_warp_matches = glob.glob(os.path.join(
-        work_dir, 'unWarpOutput_{}'.format(_UNWARP_SID),
-        '*_Forward_WARP.nii.gz'))[0]
-    if not check_skip({'sdc_sbref': sdc_sbref}, ow['apply_warp_sbref'],
-                    'Step 4: apply warp to SBREF'):
-        if fwd_warp_matches:
-            result = apply_warp_to_sbref(
-                sbref_path=sbref_path,
-                warp_file=fwd_warp_matches,
-                master_path=unwarp_nii, # - use the output as the reference
-                work_dir=safe_work_dir,
-                afni_docker=afni_docker,
-            )
-            shutil.copy(result, sdc_sbref)
-        else:
-            print('    [warn] Warp file not found — copying original SBREF as placeholder.')
-            shutil.copy(sbref_path, sdc_sbref)
-    print('    -> {}'.format(sdc_sbref))
-    # shutil.rmtree(work_dir)
-    return {
-        'sdc_bold':  unwarp_out,
-        'sdc_sbref': sdc_sbref,
-    }
-
+        sdc_sbref = _out('{}_sdc_sbref'.format(run_suffix)) # output sdc sbref
+        print(os.listdir(os.path.join(work_dir, 'unWarpOutput_TS')))
+        # - find the correct warp file from previous step
+        fwd_warp_matches = glob.glob(os.path.join(
+            work_dir, 'unWarpOutput_{}'.format(_UNWARP_SID),
+            '*_Forward_WARP.nii.gz'))[0]
+        if not check_skip({'sdc_sbref': sdc_sbref}, ow['apply_warp_sbref'],
+                        'Step 4: apply warp to SBREF'):
+            if fwd_warp_matches:
+                result = apply_warp_to_sbref(
+                    sbref_path=sbref_path,
+                    warp_file=fwd_warp_matches,
+                    master_path=unwarp_nii, # - use the output as the reference
+                    work_dir=safe_work_dir,
+                    afni_docker=afni_docker,
+                )
+                shutil.copy(result, sdc_sbref)
+            else:
+                print('    [warn] Warp file not found — copying original SBREF as placeholder.')
+                shutil.copy(sbref_path, sdc_sbref)
+        print('    -> {}'.format(sdc_sbref))
+        # shutil.rmtree(work_dir)
+        return {
+            'sdc_bold':  unwarp_out,
+            'sdc_sbref': sdc_sbref,
+        }
+    else:
+        return {
+            'sdc_bold':  unwarp_out,
+        }
 
 # ---------------------------------------------------------------------------
 # Top-level pipeline
@@ -456,12 +460,18 @@ def run_pipeline(
             raise FileNotFoundError(
                 'No reverse-PE EPI found for {}.'.format(bold_path))
         if not sbref_matches:
-            raise FileNotFoundError(
-                'No SBREF found for {}.'.format(bold_path))
+            sbref_strategy = False
+            print(
+                'No SBREF found for {}.  Continuing without SBREF.'.format(bold_path))
+        
 
         topup_path = topup_matches[0]
-        sbref_path = sbref_matches[0]
 
+        if sbref_matches:
+            sbref_path = sbref_matches[0]
+        else: 
+            sbref_path = None
+          
         print('  BOLD      : {}'.format(bold_path))
         print('  Reverse-PE: {}'.format(topup_path))
         print('  SBREF     : {}'.format(sbref_path))
