@@ -18,6 +18,7 @@ export PATH="${PIPELINE_DIR}/postproc:${PATH}"
 # --- Software versions ---
 export FREESURFER_VERSION="7.3.2"
 export FSLICENSE="${PIPELINE_DIR}/config/license.txt"
+export FS_LICENSE="${PIPELINE_DIR}/config/license.txt"
 export FSL_VERSION="6.0.7.19"
 export FSLDIR="${CONDA_PREFIX}/envs/preproc" #"${HOME}/.conda/envs/preproc/"
 export FSLOUTPUTTYPE="NIFTI_GZ"
