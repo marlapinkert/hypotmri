@@ -5,13 +5,15 @@ s02_coreg.py
 Motion correction, coregistration to FreeSurfer T1, and surface projection
 for BOLD runs that have already been SDC-corrected.
 
-Coregistration strategy
+Coregistration strategy - with SBREF
 -----------------------
 (1) Build BREF_MASTER from the first sbref found in the input directory
 (2) Coregister BREF_MASTER to anatomy with bbregister
 (3) Coregister each sbref_i to BREF_MASTER   (FLIRT, normcorr, DOF 6)
 (4) MCFLIRT per run, referencing the corresponding sbref_i
 (5) Concatenate transforms:  VOL -> sbref_i -> BREF_MASTER -> FS_T1
+
+# TODO: Add explanation for strategy without SBREF, improve associated printed outputs, put in explanation for step 6
 
 Overwrite behaviour
 -------------------
@@ -81,9 +83,13 @@ def make_bref_master(
     note_file: str,
     work_dir: str,
     docker_image: str,
+    fallback_bold: str | None = None,
 ) -> str:
     """
     Build BREF_MASTER from the first SBREF found in *subject_input_dir*.
+
+    If no SBREFs exist and *fallback_bold* is provided, extracts the middle
+    volume of *fallback_bold* as a synthetic SBREF and uses that instead.
 
     Returns the host path to BREF_MASTER.nii.gz.
     """
@@ -92,13 +98,26 @@ def make_bref_master(
     sbrefs = sorted(glob.glob(pattern))
 
     if not sbrefs:
-        raise FileNotFoundError(
-            'No SBREF files found in {}'.format(subject_input_dir))
+        if fallback_bold is None:
+            raise FileNotFoundError(
+                'No SBREF files found in {} and no fallback_bold provided.'.format(
+                    subject_input_dir))
+        print('  No SBREFs found — extracting middle volume of first BOLD run as BREF_MASTER.')
+        run_label, task_label = get_labels(fallback_bold)
+        sbref_src = make_middle_vol_sbref(
+            bold_file=fallback_bold,
+            subject=subject,
+            session=session,
+            run_label=run_label,
+            task_label=task_label,
+            subject_output_dir=subject_output_dir,
+        )
+    else:
+        sbref_src = sbrefs[0]
 
     bref_master = build_output_name(
         subject_output_dir, subject, session, 'BREF_MASTER')
 
-    sbref_src = sbrefs[0]
     print('  Using SBREF as BREF_MASTER: {}'.format(sbref_src))
 
     if sbref_src.endswith('.nii'):
@@ -306,6 +325,43 @@ def register_sbref_to_master(
     return mat_final
 
 
+def make_middle_vol_sbref(
+    bold_file: str,
+    subject: str,
+    session: str,
+    run_label: str,
+    task_label: str,
+    subject_output_dir: str,
+) -> str:
+    """
+    Extract the middle volume of *bold_file* as a synthetic SBREF.
+
+    Returns the host path to the extracted NIfTI in subject_output_dir.
+    """
+    result = subprocess.run(
+        ['fslnvols', bold_file],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError('fslnvols failed: {}'.format(result.stderr))
+    n_vols = int(result.stdout.strip())
+    mid_vol = n_vols // 2
+
+    parts = [subject]
+    if session:
+        parts.append(session)
+    if task_label:
+        parts.append(task_label)
+    if run_label:
+        parts.append(run_label)
+    parts.append('desc-midvol_synthsbref')
+    out_path = os.path.join(subject_output_dir, '_'.join(parts) + '.nii.gz')
+
+    run_local(['fslroi', bold_file, out_path, str(mid_vol), '1'])
+    print('  Synthetic SBREF (vol {}/{}) -> {}'.format(mid_vol, n_vols, out_path))
+    return out_path
+
+
 def run_mcflirt(
     bold_file: str,
     sbref_i: str,
@@ -328,6 +384,7 @@ def run_mcflirt(
         work_dir=work_dir,
         docker_image=docker_image,
         cmd=[
+            'stdbuf', '-oL', # to try and fix output buffering 
             'mcflirt',
             '-in',      bold_c,
             '-reffile', sbref_i_c,
@@ -369,8 +426,8 @@ def concat_transforms(
     shell_script = (
         f'for mat in {mats_c}/MAT_*; do '
         f'  bn=$(basename "$mat"); '
-        f'  convert_xfm -omat {combined_c}/tmp_$bn -concat {m1_c} $mat && '
-        f'  convert_xfm -omat {combined_c}/$bn     -concat {m2_c} {combined_c}/tmp_$bn && '
+        f'  convert_xfm -omat {combined_c}/tmp_$bn -concat {m1_c} $mat > /dev/null 2>&1 && '
+        f'  convert_xfm -omat {combined_c}/$bn     -concat {m2_c} {combined_c}/tmp_$bn > /dev/null 2>&1 && '
         f'  rm {combined_c}/tmp_$bn; '
         f'done'
     )
@@ -425,6 +482,7 @@ def apply_xfm4d(
     run_cmd(
         work_dir=work_dir,
         docker_image=docker_image,
+        verbose=False,
         cmd=[
             'applyxfm4D',
             bold_c,
@@ -709,7 +767,7 @@ def run_pipeline(
     Run the full motion correction + registration + surface projection pipeline.
 
     Steps 1 & bbregister are session-level (one BREF_MASTER, one bbregister).
-    Steps 2b–6 are repeated per BOLD run.
+    Steps 2b-6 are repeated per BOLD run.
 
     Returns a dict mapping run keys -> per-run output dicts.
     """
@@ -752,6 +810,30 @@ def run_pipeline(
     print('-' * 55)
 
     # ------------------------------------------------------------------
+    # Discover BOLD runs (needed before Step 1 for the no-SBREF fallback)
+    # ------------------------------------------------------------------
+    bold_pattern = opj(
+        subject_input_dir, '{}_{}*bold*.nii*'.format(subject, session))
+    bold_files = sorted(glob.glob(bold_pattern))
+
+    if task_filter:
+        task_filter = 'task-' + task_filter.removeprefix('task-')
+        bold_files = [f for f in bold_files if task_filter in os.path.basename(f)]
+    if run_filter:
+        run_filter = 'run-' + run_filter.removeprefix('run-')
+        bold_files = [f for f in bold_files if run_filter in os.path.basename(f)]
+
+    if not bold_files:
+        raise FileNotFoundError(
+            'No BOLD files found for {}_{}.  Searched: {}'.format(
+                subject, session, bold_pattern)
+        )
+
+    print('\nFound {} BOLD run(s).'.format(len(bold_files)))
+    for idx, bf in enumerate(bold_files, start=1):
+        print('  {}. {}'.format(idx, os.path.basename(bf)))
+
+    # ------------------------------------------------------------------
     # Step 1 - BREF_MASTER
     # ------------------------------------------------------------------
     print('\n[Step 1] Creating BREF_MASTER...')
@@ -773,6 +855,7 @@ def run_pipeline(
             note_file=note_file,
             work_dir=safe_session_work,
             docker_image=docker_image,
+            fallback_bold=bold_files[0],
         )
 
     print('  -> {}'.format(bref_master_final))
@@ -824,30 +907,6 @@ def run_pipeline(
     print('  FSL .mat        : {}'.format(sbref2fs_fslmat_final))
     print('  FS T1 NIfTI     : {}'.format(fs_t1_nii_final))
 
-    # ------------------------------------------------------------------
-    # Discover BOLD runs
-    # ------------------------------------------------------------------
-    bold_pattern = opj(
-        subject_input_dir, '{}_{}*bold*.nii*'.format(subject, session))
-    bold_files = sorted(glob.glob(bold_pattern))
-
-    if task_filter:
-        task_filter = 'task-' + task_filter.removeprefix('task-')
-        bold_files = [f for f in bold_files if task_filter in os.path.basename(f)]
-    if run_filter:
-        run_filter = 'run-' + run_filter.removeprefix('run-')
-        bold_files = [f for f in bold_files if run_filter in os.path.basename(f)]
-
-    if not bold_files:
-        raise FileNotFoundError(
-            'No BOLD files found for {}_{}.  Searched: {}'.format(
-                subject, session, bold_pattern)
-        )
-
-    print('\nFound {} BOLD run(s).'.format(len(bold_files)))
-    for idx, bf in enumerate(bold_files, start=1):
-        print('  {}. {}'.format(idx, os.path.basename(bf)))
-
     all_results = {}
 
     for run_idx, bold_file in enumerate(bold_files, start=1):
@@ -872,36 +931,34 @@ def run_pipeline(
             sbref_matches = [f for f in all_sbrefs
                              if not re.search(r'run-\d+', os.path.basename(f))]
 
-        sbref_file   = sbref_matches[0]
-        sbref_source = 'input'
+        if sbref_matches:
+            sbref_file   = sbref_matches[0]
+            sbref_source = 'input'
+        else:
+            parts = [subject]
+            if session:
+                parts.append(session)
+            if task_label:
+                parts.append(task_label)
+            if run_label:
+                parts.append(run_label)
+            parts.append('desc-midvol_synthsbref')
+            synthetic_sbref = opj(subject_output_dir, '_'.join(parts) + '.nii.gz')
 
-        # --- NOT IMPLEMENTED: synthetic sbref fallback ---
-        # else:
-        #     parts = [subject]
-        #     if session:
-        #         parts.append(session)
-        #     if task_label:
-        #         parts.append(task_label)
-        #     if run_label:
-        #         parts.append(run_label)
-        #     parts.append('desc-vol0bold_sbref')
-        #     synthetic_sbref = opj(
-        #         subject_output_dir, '_'.join(parts) + '.nii.gz')
-        #
-        #     if not Path(synthetic_sbref).exists():
-        #         print('  No SBREF found — extracting vol 0 as synthetic sbref...')
-        #         synthetic_sbref = make_first_vol_sbref(
-        #             bold_file=bold_file,
-        #             subject=subject,
-        #             session=session,
-        #             run_label=run_label,
-        #             task_label=task_label,
-        #             subject_output_dir=subject_output_dir,
-        #         )
-        #     else:
-        #         print('  No SBREF found — reusing existing synthetic sbref.')
-        #     sbref_file   = synthetic_sbref
-        #     sbref_source = 'vol-0 (synthetic)'
+            if not Path(synthetic_sbref).exists():
+                print('  No SBREF found — extracting middle volume as synthetic sbref...')
+                synthetic_sbref = make_middle_vol_sbref(
+                    bold_file=bold_file,
+                    subject=subject,
+                    session=session,
+                    run_label=run_label,
+                    task_label=task_label,
+                    subject_output_dir=subject_output_dir,
+                )
+            else:
+                print('  No SBREF found — reusing existing synthetic sbref.')
+            sbref_file   = synthetic_sbref
+            sbref_source = 'mid-vol (synthetic)'
 
         print('  BOLD  : {}'.format(bold_file))
         print('  SBREF : {} [{}]'.format(sbref_file, sbref_source))
