@@ -527,7 +527,7 @@ def _build_parser() -> argparse.ArgumentParser:
     req.add_argument('--output-file', required=True, help='Output derivatives file')
     req.add_argument('--sub',        required=True, help='Subject label (e.g. sub-01)')
     p.add_argument('--ses',          default='ses-01', help='Session label')
-    p.add_argument('--task',         default='',       help='Task label')
+    p.add_argument('--task',         default='',       help='Task label. Omit to process all tasks.')
     p.add_argument('--afni-docker',
                    default=os.environ.get('AFNI_IMAGE', 'afni/afni_make_build:latest'),
                    help='AFNI Docker image tag, or "local" to run on host')
