@@ -11,7 +11,7 @@ add the following to your .bash_profile
 export PIPELINE_DIR="/path/to/this/repository"
 source "${PIPELINE_DIR}/config/config_pipeline.sh"
 ```
-Next for each project you want to run with this pipeline, create a ```project_*.sh``` file inside ```$PIPELINE_DIR/config/``` (this folder). These files must have the following paths:
+Next, for each project you want to run with this pipeline, create a ```project_*.sh``` file inside ```$PIPELINE_DIR/config/``` (this folder). These files must have the following paths:
 ```bash
 #!/bin/bash
 # Put inside $PIPELINE_DIR/config/project_hypot.sh
@@ -50,10 +50,10 @@ Once this is all setup, and you have added the appropriate lines to your
 
 ### Downloads & Installation 
 
-Installing all the many, many, packages for neuroimaging analyses is a pain. Keeping it consistent, and reusable is even more of a pain. Fortunately we can use a couple of programs to manage the many packages and make installing a little easier
+Installing all the many, many, packages for neuroimaging analyses is a pain. Keeping it consistent, and reusable is even more of a pain. Fortunately, we can use a couple of programs to manage the many packages and make installing a little easier.
 
 #### [1] mamba/conda (required)
-This manages python environments. Basically, it allows you to create install a different python for each project. This is useful because different python programs have different requirements which often get in the way and cause havoc. Mamba is a speedy way to control this. You can also use conda, which will do the same things, but is a little slower. For installation instructions for mamba go to https://github.com/conda-forge/miniforge?tab=readme-ov-file#install 
+This manages python environments. Basically, it allows you to install a different python for each project. This is useful because different python programs have different requirements which often get in the way and cause havoc. Mamba is a speedy way to control this. You can also use conda, which will do the same things, but is a little slower. For installation instructions for mamba go to https://github.com/conda-forge/miniforge?tab=readme-ov-file#install 
 
 *If you want to use conda rather than mamba set ```PYPACKAGE_MANAGER=conda``` inside your ```project_*.sh``` file*
 
@@ -75,7 +75,7 @@ Save this license file, inside the folder config, in this repository
 - /where/you/cloned/this/repo/config/license.txt
 
 #### [4] MRI viewer (optional) *MARCUS CHANGE THIS YOU CAN DO BETTER*
-It is also important to have a way to view the images, to check registration, motion, artefacts etc. Everyone will have there own preference. A standard one is to use **fsleyes**. If you don't have it installed already it can be installed with mamba. 
+It is also important to have a way to view the images, to check registration, motion, artefacts etc. Everyone will have their own preference. A standard one is to use **fsleyes**. If you don't have it installed already it can be installed with mamba. 
 ```bash
 # We create a new environment with mamba, and install fsleyes to 
 $PYPACKAGE_MANAGER create -n fslmamba -c conda-forge -c https://fsl.fmrib.ox.ac.uk/fsldownloads/fslconda/public/ fsl-base fsleyes
@@ -84,15 +84,15 @@ $PYPACKAGE_MANAGER activate fslmamba
 # 3. Try opening fsleyes
 fsleyes
 ```
-I quite like itksnap; but anything you are used is good. 
+I quite like itksnap; but anything you are used to is good. 
 
-#### [5] VS code(optional - highly recommended):
-Vscode - use this to edit all of your programming files etc. It is also useful for running notebooks for code. It also can be used to install helpful plugins, like niivue. You could use another IDE if you are used to working in a specific environment. 
+#### [5] VS code (optional - highly recommended):
+VS Code - use this to edit all of your programming files etc. It is also useful for running notebooks for code. It also can be used to install helpful plugins, like niivue. You could use another IDE if you are used to working in a specific environment. 
 - https://code.visualstudio.com/download 
 - TODO: add examples of notebooks
 
 #### [6] Everything else...
-Once you have this installed you are ready to go. All the other installation steps will be (hopefully!) handelled along the way by either *mamba* or *docker*. Remember for docker commands to work they need to be running  
+Once you have this installed you are ready to go. All the other installation steps will be (hopefully!) handelled along the way by either *mamba* or *docker*. Remember for docker commands to work, they need to be running!  
 
 #### Automatic install of other requirements
 Once the above has been installed we then run some stuff to get everything started: 
